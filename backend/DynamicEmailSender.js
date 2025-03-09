@@ -28,19 +28,21 @@ async function emailSender(templatePath, recieverEmail, toReplaceObject) {
         }
         const msg = {
             to: recieverEmail,
-            from: 'ansarialikamran7@gmail.com', // Change to your verified sender
+            from: `${process.env.EMAIL_SENDER}`, // Change to your verified sender
             subject: 'Sending First Email',
             text: "",
             html: content,
         }
         const transporter = nodemailer.createTransport(sendGridDetails);
-        await transporter.sendMail(msg);
+        await transporter.sendMail(msg).then(()=>{
+            console.log("Email sent!")
+        });
     } catch (err) {
         console.log("email not send because of the errro", err);
     }
 }
 
-module.exports = emailSender;
+module.exports = {emailSender};
 // demo
 // const toReplaceObject = {
 //     name: "Ali",

@@ -14,6 +14,7 @@ const promisifiedJWTverify = promisify(jwt.verify)
 const userModel = require("./UserModel")
 
 const {getCurrentMovies, getTopRatedMovies} = require("./controller/movieController")
+const { emailSender } = require("./DynamicEmailSender")
 
 dotenv.config();
 /********************************************************************/
@@ -127,13 +128,69 @@ async function forgetPasswordHandler(req, res){
         res.status(200).json({
             "message":"otp is send successfully",
             "status":"success",
-            "otp":otp,
+            "otp":user.otp,
+            "otpExpiry":user.otpExpiry,
             resetURL:`http:localhost:3000/api/auth/resetPassword/${user["_id"]}`
         })
-        // const templateData = { name: user.name, otp: user.otp }
-        // await emailSender("./templates/otp.html", user.email, templateData);
+        const templateData = { name: user.name, otp: user.otp }
+        await emailSender("./templates/otp.html", user.email, templateData);
     } catch (error) {
         console.log("Error",error)
+        res.status(500).json({
+            "message":error.message,
+            "status":"failure"
+        })
+    }
+}
+
+async function resetPasswordHandler(req, res){
+    try {
+        const resetDetails = req.body;
+        if(!resetDetails.otp || !resetDetails.password || !resetDetails.confirmPassword || resetDetails.password!=resetDetails.confirmPassword){
+            return res.status(400).json({
+                "message":"incorrect details",
+                "status":"failure"
+            })
+        }
+        const userId = req.params.userId;
+        const user = await userModel.findById(userId);
+
+        if(user==null){
+            return res.status(400).json({
+                "message":"invalid requests",
+                "status":"failure"
+            })
+        }
+        if (user.otp == undefined) {
+            return res.status(401).json({
+                status: "failure",
+                message: "unauthorized acces to reset Password"
+            })
+        }
+        if (Date.now() > user.otpExpiry) {
+            return res.status(401).json({
+                status: "failure",
+                message: "otp expired"
+            })
+        }
+        if (user.otp != resetDetails.otp) {
+            return res.status(401).json({
+                status: "failure",
+                message: "otp is incorrect"
+            })
+        }
+        user.password = resetDetails.password;
+        user.confirmPassword = resetDetails.confirmPassword;
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+        await user.save();
+        res.status(200).json({
+            status: "success",
+            message: "password reset successfully",
+            user
+        })
+    } catch (error) {
+        console.log("api.js_resetPassword",error)
         res.status(500).json({
             "message":error.message,
             "status":"failure"
@@ -144,7 +201,7 @@ async function forgetPasswordHandler(req, res){
 app.post("/api/auth/signup",signupHandler)
 app.post("/api/auth/login",loginHandler)
 app.patch("/api/auth/forgetPassword",forgetPasswordHandler)
-
+app.patch("/api/auth/resetPassword/:userId",resetPasswordHandler)
 
 app.get("/api/movies/currentplaying", getCurrentMovies);
 app.get("/api/movies/topRated",getTopRatedMovies)
